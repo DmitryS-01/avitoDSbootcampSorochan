@@ -1,6 +1,81 @@
-.venv/
-__pycache__/
-.ipynb_checkpoints/
-*.py[cod]
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100/
+.fseventsd/
+.Spotlight-V100/
+.TemporaryItems/
+.Trashes/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments and local configuration
+.env
+.env.*
+!.env.example
+.direnv/
+.venv/
+env/
+venv/
+ENV/
+__pypackages__/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Jupyter and IPython
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+.ipython/
+
+# Linters, type checkers and tests
 .ruff_cache/
+.mypy_cache/
+.pyright/
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Package-manager caches
+.cache/
+.pip-cache/
+.uv-cache/
+
+# IDEs and editors
+.idea/
+.vscode/
+.fleet/
+.history/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Data-science experiment artifacts
+catboost_info/
+lightning_logs/
+mlruns/
+wandb/
+ray_results/
+checkpoints/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
