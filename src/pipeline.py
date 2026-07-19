@@ -55,8 +55,6 @@ def _semantic_worker(
 
 def _build_link_graph(
     articles: pd.DataFrame,
-    *,
-    normalize_outgoing: bool = False,
 ) -> np.ndarray:
     """Build a normalized graph from links between help articles."""
     article_ids = articles["article_id"].astype(int).to_numpy()
@@ -69,8 +67,7 @@ def _build_link_graph(
             target = id_to_column.get(int(article_id))
             if target is not None and target != row:
                 graph[row, target] = 1.0
-    axis = 1 if normalize_outgoing else 0
-    return graph / np.maximum(graph.sum(axis=axis, keepdims=True), 1.0)
+    return graph / np.maximum(graph.sum(axis=0, keepdims=True), 1.0)
 
 
 def _build_metadata(
@@ -224,7 +221,6 @@ def fit_predict(
         semantic_path,
     )
     link_graph = _build_link_graph(articles)
-    noise_link_graph = _build_link_graph(articles, normalize_outgoing=True)
 
     article_index = ArticleFeatureIndex().fit(articles)
     static_calibration = article_index.score(calibration)
@@ -252,7 +248,7 @@ def fit_predict(
         calibration,
         labels,
         articles,
-        noise_link_graph,
+        link_graph,
     )
     noise_query_test = _build_test_query_scores(
         calibration,
@@ -260,7 +256,7 @@ def fit_predict(
         labels,
         query_space,
         articles,
-        noise_link_graph,
+        link_graph,
     )
 
     train_scores = {**query_calibration, **static_calibration}
