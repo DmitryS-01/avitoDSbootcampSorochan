@@ -1,18 +1,16 @@
-# Notebooks
+# Ноутбуки
 
-| Ноутбук | Содержание |
-|---|---|
-| `00_eda_cleaning.ipynb` | EDA и очистка HTML |
-| `01_popularity_baseline.ipynb` | popularity baseline |
-| `02_bm25.ipynb` | BM25 и stemming |
-| `03_query_knn.ipynb` | query kNN |
-| `04_linear_svc.ipynb` | LinearSVC |
-| `05_lambdamart.ipynb` | LightGBM LambdaMART |
-| `06_xgboost_ranker.ipynb` | XGBoost pairwise |
-| `07_ranker_blend.ipynb` | RRF-ансамбль |
-| `08_error_analysis.ipynb` | анализ OOF-ошибок |
-| `09_final_pipeline.ipynb` | проверка и сохранение submission |
+Ноутбуки запускаются по порядку из корня репозитория в ядре `Python (.venv)`:
 
-Все ноутбуки я запускаю из корня через kernel `Python (.venv)`.
-В `00–08` клетку сохранения `answer.csv` я оставляю закомментированной. В `09`
-клетка активна и создаёт submission, загруженный в TestSys.
+1. `00_eda_cleaning.ipynb` — данные и очистка HTML;
+2. `01_popularity_baseline.ipynb` — тривиальный baseline;
+3. `02_bm25.ipynb` — лексический поиск;
+4. `03_query_knn.ipynb` — перенос меток похожих запросов;
+5. `04_linear_svc.ipynb` — линейный текстовый классификатор;
+6. `05_lambdamart.ipynb` — learning-to-rank;
+7. `06_semantic_query_knn.ipynb` — multilingual E5;
+8. `07_ranker_blend.ipynb` — финальный blend;
+9. `08_error_analysis.ipynb` — анализ ошибок;
+10. `09_final_pipeline.ipynb` — проверка и сохранение submission.
+
+В `00–08` клетка сохранения закомментирована. В `09` она активна.

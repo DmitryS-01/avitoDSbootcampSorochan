@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from xgboost import XGBRanker
 
 from metrics import reciprocal_rank_scores, top_indices
 
@@ -120,54 +119,6 @@ def fit_lgbm_bagged(dataset: PairData, seed: int) -> lgb.LGBMRanker:
     return model
 
 
-def fit_lgbm_stable(dataset: PairData) -> lgb.LGBMRanker:
-    """Fit a stable LambdaMART model without row bagging."""
-    if dataset.labels is None:
-        raise ValueError("Training labels are required")
-    model = lgb.LGBMRanker(
-        objective="lambdarank",
-        n_estimators=450,
-        learning_rate=0.015,
-        num_leaves=15,
-        max_depth=5,
-        min_child_samples=15,
-        subsample=0.9,
-        colsample_bytree=0.85,
-        reg_lambda=4.0,
-        reg_alpha=0.2,
-        random_state=42,
-        n_jobs=2,
-        verbosity=-1,
-        deterministic=True,
-        force_col_wise=True,
-    )
-    model.fit(dataset.features, dataset.labels, group=dataset.groups)
-    return model
-
-
-def fit_xgboost_pairwise(dataset: PairData) -> XGBRanker:
-    """Fit the pairwise XGBoost ranker."""
-    if dataset.labels is None:
-        raise ValueError("Training labels are required")
-    query_ids = np.repeat(np.arange(len(dataset.groups)), dataset.groups)
-    model = XGBRanker(
-        objective="rank:pairwise",
-        n_estimators=350,
-        max_depth=4,
-        learning_rate=0.03,
-        min_child_weight=5,
-        subsample=0.9,
-        colsample_bytree=0.8,
-        reg_lambda=5.0,
-        reg_alpha=0.1,
-        tree_method="hist",
-        n_jobs=2,
-        random_state=42,
-    )
-    model.fit(dataset.features, dataset.labels, qid=query_ids, verbose=False)
-    return model
-
-
 def predict_pairs(
     model: object,
     dataset: PairData,
@@ -193,13 +144,20 @@ def predict_pairs(
     return scores
 
 
-def blend_rankers(score_matrices: list[np.ndarray]) -> np.ndarray:
-    """Blend four complementary rankers by reciprocal ranks."""
-    weights = np.array(
-        [0.46440025, 0.01076991, 0.47668782, 0.04814202],
-        dtype=np.float32,
+def blend_rankers(
+    score_matrices: list[np.ndarray],
+    semantic_scores: np.ndarray,
+) -> np.ndarray:
+    """Blend two bagged LambdaMART models with semantic query retrieval."""
+    if len(score_matrices) != 2:
+        raise ValueError("Expected two LambdaMART score matrices")
+    ranker_scores = sum(
+        0.5 * reciprocal_rank_scores(scores, depth=100, offset=5.0)
+        for scores in score_matrices
     )
-    return sum(
-        weight * reciprocal_rank_scores(scores)
-        for weight, scores in zip(weights, score_matrices, strict=True)
+    semantic_ranks = reciprocal_rank_scores(
+        semantic_scores,
+        depth=100,
+        offset=10.0,
     )
+    return 0.8 * ranker_scores + 0.2 * semantic_ranks

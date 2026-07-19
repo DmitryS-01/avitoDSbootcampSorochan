@@ -18,10 +18,9 @@ from rankers import (
     blend_rankers,
     build_pair_data,
     fit_lgbm_bagged,
-    fit_lgbm_stable,
-    fit_xgboost_pairwise,
     predict_pairs,
 )
+from semantic import semantic_query_scores
 
 
 def _build_link_graph(articles: pd.DataFrame) -> np.ndarray:
@@ -148,6 +147,7 @@ def fit_predict(
 
     article_ids = articles["article_id"].astype(int).to_numpy()
     labels = build_label_matrix(calibration, article_ids)
+    semantic_scores = semantic_query_scores(calibration, test, labels)
     link_graph = _build_link_graph(articles)
 
     article_index = ArticleFeatureIndex().fit(articles)
@@ -195,13 +195,11 @@ def fit_predict(
     models = [
         fit_lgbm_bagged(train_pairs, 42),
         fit_lgbm_bagged(train_pairs, 123),
-        fit_xgboost_pairwise(train_pairs),
-        fit_lgbm_stable(train_pairs),
     ]
     model_scores = [
         predict_pairs(model, test_pairs, len(article_ids)) for model in models
     ]
-    final_scores = blend_rankers(model_scores)
+    final_scores = blend_rankers(model_scores, semantic_scores)
 
     answer = make_answer(test["query_id"], final_scores, article_ids)
     validate_answer(answer, test, article_ids)

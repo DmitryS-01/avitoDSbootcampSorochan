@@ -4,8 +4,6 @@ Lexical,BM25,0.2694374339,5-fold OOF
 Lexical,Stemmed BM25,0.3187390212,5-fold OOF
 Supervised retrieval,Query kNN,0.6008226190,5-fold OOF
 Linear,LinearSVC,0.6005332011,5-fold OOF
-Ranker,LambdaMART base,0.6746023810,nested 5-fold OOF
-Ranker,XGBoost pairwise,0.6946619000,nested 5-fold OOF
-Ranker,LightGBM bagged,0.6974180000,nested 5-fold OOF
-Blend,LGBM + XGBoost,0.6988295000,OOF blend
-Final,Ranker RRF ensemble,0.6995664000,OOF blend
+Semantic,E5 + char kNN,0.6035270000,5-fold OOF
+Ranker,LightGBM LambdaMART,0.6909974868,nested 5-fold OOF
+Final,E5 + LightGBM blend,0.6927860000,nested 5-fold OOF
