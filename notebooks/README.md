@@ -9,7 +9,7 @@
 5. `04_linear_svc.ipynb` — линейный текстовый классификатор;
 6. `05_lambdamart.ipynb` — learning-to-rank;
 7. `06_semantic_query_knn.ipynb` — multilingual E5;
-8. `07_ranker_blend.ipynb` — E5/LightGBM и noise/spell blend;
+8. `07_ranker_blend.ipynb` — E5/LightGBM, AutoML-XGBoost и cross-encoder;
 9. `08_error_analysis.ipynb` — анализ ошибок основной ветки;
 10. `09_final_pipeline.ipynb` — проверка и сохранение submission.
 

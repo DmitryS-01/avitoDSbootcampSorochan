@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBRanker
 
-from metrics import reciprocal_rank_scores, top_indices
+from metrics import rank_power_scores, reciprocal_rank_scores, top_indices
 
 
 @dataclass(frozen=True)
@@ -143,6 +143,32 @@ def fit_xgboost_pairwise(dataset: PairData) -> XGBRanker:
     return model
 
 
+def fit_automl_xgboost(dataset: PairData) -> XGBRanker:
+    """Fit the XGBoost configuration selected by AutoML."""
+    if dataset.labels is None:
+        raise ValueError("Training labels are required")
+    query_ids = np.repeat(np.arange(len(dataset.groups)), dataset.groups)
+    model = XGBRanker(
+        objective="rank:ndcg",
+        n_estimators=993,
+        max_depth=0,
+        max_leaves=6,
+        min_child_weight=0.08308222359150502,
+        learning_rate=0.041885202355096386,
+        subsample=0.8500411921332124,
+        colsample_bylevel=0.8785770664953232,
+        colsample_bytree=0.9855946937981651,
+        reg_alpha=0.0009765625,
+        reg_lambda=0.029694589176833635,
+        grow_policy="lossguide",
+        tree_method="hist",
+        n_jobs=2,
+        random_state=42,
+    )
+    model.fit(dataset.features, dataset.labels, qid=query_ids, verbose=False)
+    return model
+
+
 def predict_pairs(
     model: object,
     dataset: PairData,
@@ -205,12 +231,11 @@ def postprocess_noise_scores(scores: np.ndarray, labels: np.ndarray) -> np.ndarr
     return result
 
 
-def blend_rankers(
+def blend_base_rankers(
     score_matrices: list[np.ndarray],
     semantic_scores: np.ndarray,
-    noise_scores: np.ndarray,
 ) -> np.ndarray:
-    """Blend the E5/LambdaMART system with the noise-aware ranker."""
+    """Blend the two LambdaMART models with semantic query kNN."""
     if len(score_matrices) != 2:
         raise ValueError("Expected two LambdaMART score matrices")
     ranker_scores = sum(
@@ -222,7 +247,17 @@ def blend_rankers(
         depth=100,
         offset=10.0,
     )
-    semantic_blend = 0.8 * ranker_scores + 0.2 * semantic_ranks
-    return 0.5 * reciprocal_rank_scores(
-        semantic_blend, depth=100, offset=10.0
-    ) + 0.5 * reciprocal_rank_scores(noise_scores, depth=100, offset=10.0)
+    return 0.8 * ranker_scores + 0.2 * semantic_ranks
+
+
+def blend_rankers(
+    base_scores: np.ndarray,
+    automl_scores: np.ndarray,
+    cross_encoder_scores: np.ndarray,
+) -> np.ndarray:
+    """Blend the base, tuned XGBoost and cross-encoder ranks."""
+    return (
+        0.85 * rank_power_scores(base_scores, power=0.5)
+        + 0.12 * rank_power_scores(automl_scores, power=1.5)
+        + 0.03 * rank_power_scores(cross_encoder_scores, power=1.0)
+    )

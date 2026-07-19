@@ -11,18 +11,19 @@ from features import ArticleFeatureIndex, QueryFeatureSpace
 from metrics import (
     build_label_matrix,
     make_answer,
+    top_indices,
     validate_answer,
 )
 from query_models import score_query_sources
 from rankers import (
+    blend_base_rankers,
     blend_rankers,
     build_pair_data,
+    fit_automl_xgboost,
     fit_lgbm_bagged,
-    fit_xgboost_pairwise,
-    postprocess_noise_scores,
     predict_pairs,
 )
-from semantic import semantic_query_scores
+from semantic import cross_encoder_scores, semantic_query_scores
 
 
 def _build_link_graph(
@@ -288,10 +289,19 @@ def fit_predict(
     model_scores = [
         predict_pairs(model, test_pairs, len(article_ids)) for model in models
     ]
-    noise_model = fit_xgboost_pairwise(noise_train_pairs)
-    noise_scores = predict_pairs(noise_model, noise_test_pairs, len(article_ids))
-    noise_scores = postprocess_noise_scores(noise_scores, labels)
-    final_scores = blend_rankers(model_scores, semantic_scores, noise_scores)
+    base_scores = blend_base_rankers(model_scores, semantic_scores)
+    automl_model = fit_automl_xgboost(noise_train_pairs)
+    automl_scores = predict_pairs(
+        automl_model,
+        noise_test_pairs,
+        len(article_ids),
+    )
+    cross_scores = cross_encoder_scores(
+        test,
+        articles,
+        top_indices(base_scores, 10),
+    )
+    final_scores = blend_rankers(base_scores, automl_scores, cross_scores)
 
     answer = make_answer(test["query_id"], final_scores, article_ids)
     validate_answer(answer, test, article_ids)

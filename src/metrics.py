@@ -50,6 +50,20 @@ def reciprocal_rank_scores(
     return result
 
 
+def rank_power_scores(
+    scores: np.ndarray,
+    power: float,
+    depth: int = 10,
+) -> np.ndarray:
+    """Convert top ranks to normalized power-weighted points."""
+    depth = min(depth, scores.shape[1])
+    indices = top_indices(scores, depth)
+    result = np.zeros_like(scores, dtype=np.float32)
+    points = ((depth - np.arange(depth)) / depth) ** power
+    result[np.arange(len(scores))[:, None], indices] = points
+    return result
+
+
 def make_answer(
     query_ids: pd.Series,
     scores: np.ndarray,
