@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.ipc as ipc
 from sklearn.model_selection import KFold
 
 DATA_DIR = Path("statement/candidate_public/candidate_data")
@@ -11,14 +12,19 @@ TOP_K = 10
 N_SPLITS = 5
 
 
+def read_feather(path: Path, columns: list[str]) -> pd.DataFrame:
+    """Read selected columns from a Feather V2 file."""
+    return ipc.open_file(path).read_all().select(columns).to_pandas()
+
+
 def read_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read articles, calibration queries and test queries."""
-    articles = pd.read_feather(DATA_DIR / "articles.f", columns=["article_id"])
-    calibration = pd.read_feather(
+    articles = read_feather(DATA_DIR / "articles.f", ["article_id"])
+    calibration = read_feather(
         DATA_DIR / "calibration.f",
-        columns=["ground_truth"],
+        ["ground_truth"],
     )
-    test = pd.read_feather(DATA_DIR / "test.f", columns=["query_id"])
+    test = read_feather(DATA_DIR / "test.f", ["query_id"])
     return articles, calibration, test
 
 

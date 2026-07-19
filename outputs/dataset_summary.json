@@ -1,0 +1,12 @@
+{
+  "articles": 793,
+  "calibration_queries": 500,
+  "test_queries": 500,
+  "labeled_articles": 79,
+  "unseen_articles": 714,
+  "average_labels_per_query": 1.5219999551773071,
+  "multilabel_queries": 221,
+  "singleton_labeled_articles": 40,
+  "median_article_length": 2166.0,
+  "median_query_length": 67.0
+}
