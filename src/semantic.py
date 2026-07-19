@@ -112,7 +112,7 @@ def cross_encoder_scores(
         CROSS_ENCODER_NAME,
         revision=CROSS_ENCODER_REVISION,
     )
-    device = torch.device("cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device).eval()
 
     documents = [
@@ -128,7 +128,7 @@ def cross_encoder_scores(
     flat_documents = [documents[column] for column in flat_columns]
 
     predictions: list[np.ndarray] = []
-    batch_size = 8
+    batch_size = 16 if device.type == "mps" else 8
     for start in range(0, len(flat_queries), batch_size):
         batch = tokenizer(
             flat_queries[start : start + batch_size],

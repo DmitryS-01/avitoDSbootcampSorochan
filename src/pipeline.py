@@ -1,5 +1,9 @@
 """End-to-end training and prediction pipeline."""
 
+import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +27,30 @@ from rankers import (
     fit_lgbm_bagged,
     predict_pairs,
 )
-from semantic import cross_encoder_scores, semantic_query_scores
+
+
+def _semantic_worker(
+    data_dir: Path,
+    mode: str,
+    output_path: Path,
+    candidates_path: Path | None = None,
+) -> np.ndarray:
+    """Run neural inference outside the tabular-model process."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("semantic_worker.py")),
+        mode,
+        str(data_dir),
+        str(output_path),
+    ]
+    if candidates_path is not None:
+        command.append(str(candidates_path))
+    environment = os.environ.copy()
+    environment["TOKENIZERS_PARALLELISM"] = "false"
+    environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    subprocess.run(command, check=True, env=environment)
+    with np.load(output_path) as saved:
+        return saved["scores"]
 
 
 def _build_link_graph(
@@ -188,9 +215,15 @@ def fit_predict(
 
     article_ids = articles["article_id"].astype(int).to_numpy()
     labels = build_label_matrix(calibration, article_ids)
-    semantic_scores = semantic_query_scores(calibration, test, labels)
+    temporary = tempfile.TemporaryDirectory(prefix="avito-semantic-")
+    temporary_dir = Path(temporary.name)
+    semantic_path = temporary_dir / "semantic.npz"
+    semantic_scores = _semantic_worker(
+        data_dir,
+        "semantic",
+        semantic_path,
+    )
     link_graph = _build_link_graph(articles)
-    # The noise/spell branch was validated with outgoing transition weights.
     noise_link_graph = _build_link_graph(articles, normalize_outgoing=True)
 
     article_index = ArticleFeatureIndex().fit(articles)
@@ -296,13 +329,17 @@ def fit_predict(
         noise_test_pairs,
         len(article_ids),
     )
-    cross_scores = cross_encoder_scores(
-        test,
-        articles,
-        top_indices(base_scores, 10),
+    candidates_path = temporary_dir / "candidates.npy"
+    np.save(candidates_path, top_indices(base_scores, 10))
+    cross_scores = _semantic_worker(
+        data_dir,
+        "cross",
+        temporary_dir / "cross.npz",
+        candidates_path,
     )
     final_scores = blend_rankers(base_scores, automl_scores, cross_scores)
 
     answer = make_answer(test["query_id"], final_scores, article_ids)
     validate_answer(answer, test, article_ids)
+    temporary.cleanup()
     return answer

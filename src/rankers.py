@@ -120,29 +120,6 @@ def fit_lgbm_bagged(dataset: PairData, seed: int) -> lgb.LGBMRanker:
     return model
 
 
-def fit_xgboost_pairwise(dataset: PairData) -> XGBRanker:
-    """Fit the pairwise ranker for noise and spelling features."""
-    if dataset.labels is None:
-        raise ValueError("Training labels are required")
-    query_ids = np.repeat(np.arange(len(dataset.groups)), dataset.groups)
-    model = XGBRanker(
-        objective="rank:pairwise",
-        n_estimators=350,
-        max_depth=4,
-        learning_rate=0.03,
-        min_child_weight=5,
-        subsample=0.9,
-        colsample_bytree=0.8,
-        reg_lambda=5.0,
-        reg_alpha=0.1,
-        tree_method="hist",
-        n_jobs=2,
-        random_state=42,
-    )
-    model.fit(dataset.features, dataset.labels, qid=query_ids, verbose=False)
-    return model
-
-
 def fit_automl_xgboost(dataset: PairData) -> XGBRanker:
     """Fit the XGBoost configuration selected by AutoML."""
     if dataset.labels is None:
@@ -192,43 +169,6 @@ def predict_pairs(
         scores[row, columns] = prediction[offset : offset + size]
         offset += size
     return scores
-
-
-def postprocess_noise_scores(scores: np.ndarray, labels: np.ndarray) -> np.ndarray:
-    """Add label co-occurrence before selecting the noise model top-10."""
-    frequency = labels.sum(axis=0).astype(np.float32)
-    cooccurrence = labels.T @ labels
-    np.fill_diagonal(cooccurrence, 0.0)
-    cosine = cooccurrence / np.sqrt(
-        np.maximum(frequency[:, None] * frequency[None, :], 1.0)
-    )
-
-    base = reciprocal_rank_scores(scores, depth=30, offset=5.0)
-    first_hop = base @ cosine
-    propagated = base + 0.15 * first_hop + 0.003 * (first_hop @ cosine)
-
-    conditional = cooccurrence / np.maximum(frequency[:, None], 1.0)
-    base = reciprocal_rank_scores(propagated, depth=100, offset=2.0)
-    ranking = np.empty((len(scores), 10), dtype=int)
-    for row in range(len(scores)):
-        available = np.ones(scores.shape[1], dtype=bool)
-        first_article = -1
-        for position in range(10):
-            current = base[row].copy()
-            if position:
-                current += 0.2 * conditional[first_article]
-            current[~available] = -1_000_000.0
-            article = int(np.argmax(current))
-            if position == 0:
-                first_article = article
-            ranking[row, position] = article
-            available[article] = False
-
-    result = np.full_like(scores, -1_000_000.0, dtype=np.float32)
-    result[np.arange(len(scores))[:, None], ranking] = np.arange(
-        10, 0, -1, dtype=np.float32
-    )
-    return result
 
 
 def blend_base_rankers(
