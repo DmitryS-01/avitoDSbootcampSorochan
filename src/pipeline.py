@@ -18,12 +18,18 @@ from rankers import (
     blend_rankers,
     build_pair_data,
     fit_lgbm_bagged,
+    fit_xgboost_pairwise,
+    postprocess_noise_scores,
     predict_pairs,
 )
 from semantic import semantic_query_scores
 
 
-def _build_link_graph(articles: pd.DataFrame) -> np.ndarray:
+def _build_link_graph(
+    articles: pd.DataFrame,
+    *,
+    normalize_outgoing: bool = False,
+) -> np.ndarray:
     """Build a normalized graph from links between help articles."""
     article_ids = articles["article_id"].astype(int).to_numpy()
     id_to_column = {
@@ -35,7 +41,8 @@ def _build_link_graph(articles: pd.DataFrame) -> np.ndarray:
             target = id_to_column.get(int(article_id))
             if target is not None and target != row:
                 graph[row, target] = 1.0
-    return graph / np.maximum(graph.sum(axis=0, keepdims=True), 1.0)
+    axis = 1 if normalize_outgoing else 0
+    return graph / np.maximum(graph.sum(axis=axis, keepdims=True), 1.0)
 
 
 def _build_metadata(
@@ -117,6 +124,39 @@ def _build_oof_query_scores(
     return result
 
 
+def _build_fold_local_oof_query_scores(
+    calibration: pd.DataFrame,
+    labels: np.ndarray,
+    articles: pd.DataFrame,
+    link_graph: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Build strictly fold-local query features for the noise model."""
+    splitter = KFold(n_splits=5, shuffle=True, random_state=42)
+    result: dict[str, np.ndarray] = {}
+    for train_index, valid_index in splitter.split(calibration):
+        train_queries = calibration.iloc[train_index]
+        valid_queries = calibration.iloc[valid_index]
+        fold_space = QueryFeatureSpace().fit(train_queries["query_clean"])
+        fold_scores = score_query_sources(
+            fold_space.calibration(),
+            fold_space.calibration_char(),
+            fold_space.transform(valid_queries["query_clean"]),
+            fold_space.transform_char(valid_queries["query_clean"]),
+            labels[train_index],
+            train_queries["query_clean"].tolist(),
+            valid_queries["query_clean"].tolist(),
+            articles,
+            link_graph,
+        )
+        if not result:
+            result = {
+                name: np.zeros_like(labels, dtype=np.float32) for name in fold_scores
+            }
+        for name, values in fold_scores.items():
+            result[name][valid_index] = values
+    return result
+
+
 def _build_test_query_scores(
     calibration: pd.DataFrame,
     test: pd.DataFrame,
@@ -149,10 +189,14 @@ def fit_predict(
     labels = build_label_matrix(calibration, article_ids)
     semantic_scores = semantic_query_scores(calibration, test, labels)
     link_graph = _build_link_graph(articles)
+    # The noise/spell branch was validated with outgoing transition weights.
+    noise_link_graph = _build_link_graph(articles, normalize_outgoing=True)
 
     article_index = ArticleFeatureIndex().fit(articles)
     static_calibration = article_index.score(calibration)
     static_test = article_index.score(test)
+    noise_static_calibration = article_index.score_noise_spell(calibration)
+    noise_static_test = article_index.score_noise_spell(test)
 
     query_space = QueryFeatureSpace().fit(calibration["query_clean"])
     query_calibration = _build_oof_query_scores(
@@ -170,16 +214,46 @@ def fit_predict(
         articles,
         link_graph,
     )
+    noise_query_calibration = _build_fold_local_oof_query_scores(
+        calibration,
+        labels,
+        articles,
+        noise_link_graph,
+    )
+    noise_query_test = _build_test_query_scores(
+        calibration,
+        test,
+        labels,
+        query_space,
+        articles,
+        noise_link_graph,
+    )
 
     train_scores = {**query_calibration, **static_calibration}
     test_scores = {**query_test, **static_test}
     static_names = set(static_calibration)
+    noise_train_scores = {
+        **noise_query_calibration,
+        **static_calibration,
+        **noise_static_calibration,
+    }
+    noise_test_scores = {
+        **noise_query_test,
+        **static_test,
+        **noise_static_test,
+    }
+    noise_static_names = {
+        *static_calibration,
+        *noise_static_calibration,
+    }
     seen_articles = np.flatnonzero(labels.sum(axis=0) > 0)
+    calibration_metadata = _build_metadata(calibration, articles)
+    test_metadata = _build_metadata(test, articles)
 
     train_pairs = build_pair_data(
         np.arange(len(calibration)),
         train_scores,
-        _build_metadata(calibration, articles),
+        calibration_metadata,
         static_names,
         seen_articles,
         labels,
@@ -187,8 +261,23 @@ def fit_predict(
     test_pairs = build_pair_data(
         np.arange(len(test)),
         test_scores,
-        _build_metadata(test, articles),
+        test_metadata,
         static_names,
+        seen_articles,
+    )
+    noise_train_pairs = build_pair_data(
+        np.arange(len(calibration)),
+        noise_train_scores,
+        calibration_metadata,
+        noise_static_names,
+        seen_articles,
+        labels,
+    )
+    noise_test_pairs = build_pair_data(
+        np.arange(len(test)),
+        noise_test_scores,
+        test_metadata,
+        noise_static_names,
         seen_articles,
     )
 
@@ -199,7 +288,10 @@ def fit_predict(
     model_scores = [
         predict_pairs(model, test_pairs, len(article_ids)) for model in models
     ]
-    final_scores = blend_rankers(model_scores, semantic_scores)
+    noise_model = fit_xgboost_pairwise(noise_train_pairs)
+    noise_scores = predict_pairs(noise_model, noise_test_pairs, len(article_ids))
+    noise_scores = postprocess_noise_scores(noise_scores, labels)
+    final_scores = blend_rankers(model_scores, semantic_scores, noise_scores)
 
     answer = make_answer(test["query_id"], final_scores, article_ids)
     validate_answer(answer, test, article_ids)

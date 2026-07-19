@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.ipc as ipc
 
-from text import prepare_articles, prepare_queries
+from text import ArticleSpellCorrector, prepare_articles, prepare_queries
 
 
 def read_feather(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
@@ -24,6 +24,7 @@ def load_data(
     calibration = read_feather(data_dir / "calibration.f")
     test = read_feather(data_dir / "test.f")
     articles = prepare_articles(articles)
-    calibration = prepare_queries(calibration)
-    test = prepare_queries(test)
+    corrector = ArticleSpellCorrector(articles)
+    calibration = prepare_queries(calibration, corrector)
+    test = prepare_queries(test, corrector)
     return articles, calibration, test

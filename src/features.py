@@ -213,6 +213,34 @@ class ArticleFeatureIndex:
             result[name] = (query_matrix @ field.matrix.T).toarray().astype(np.float32)
         return result
 
+    def score_noise_spell(self, queries: pd.DataFrame) -> dict[str, np.ndarray]:
+        """Score noise-free and spell-corrected query views."""
+        core = queries["query_core"].tolist()
+        spell = queries["query_spell"].tolist()
+        result = {
+            "bm25_core": self.bm25.score(core),
+            "bm25_spell": self.bm25.score(spell),
+            "stem_bm25_core": self.stem_bm25.score(queries["query_core_stem"].tolist()),
+            "stem_bm25_spell": self.stem_bm25.score(
+                queries["query_spell_stem"].tolist()
+            ),
+        }
+        extra_fields = (
+            "title_word",
+            "title_char",
+            "title_heading_word",
+            "structured_word",
+            "intro_word",
+        )
+        for name in extra_fields:
+            field = self.fields[name]
+            for suffix, values in (("core", core), ("spell", spell)):
+                matrix = field.vectorizer.transform(values)
+                result[f"{name}_{suffix}"] = (
+                    (matrix @ field.matrix.T).toarray().astype(np.float32)
+                )
+        return result
+
 
 class QueryFeatureSpace:
     """Word and character TF-IDF space for user questions."""

@@ -6,4 +6,6 @@ Supervised retrieval,Query kNN,0.6008226190,5-fold OOF
 Linear,LinearSVC,0.6005332011,5-fold OOF
 Semantic,E5 + char kNN,0.6035270000,5-fold OOF
 Ranker,LightGBM LambdaMART,0.6909974868,nested 5-fold OOF
-Final,E5 + LightGBM blend,0.6927860000,nested 5-fold OOF
+Blend,E5 + LightGBM blend,0.6927860000,nested 5-fold OOF
+Ranker,Noise/spell XGBoost,0.6854996032,nested 5-fold OOF
+Final,E5 + LightGBM + noise/spell,0.6960386243,nested 5-fold OOF
